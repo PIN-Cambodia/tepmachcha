@@ -4,8 +4,6 @@
 #define SONAR_SAMPLES 11
 #define SONAR_RETRIES 33
 
-int16_t sonarLastGoodReading = SENSOR_HEIGHT * 10;
-
 // insertion sort: https://en.wikipedia.org/wiki/Insertion_sort
 void sort (int16_t *a, uint8_t n)
 {
@@ -50,18 +48,6 @@ int16_t mode (int16_t *sample, uint8_t n)
     return mode;
 }
 
-
-// Check if a sonar reading is within bounds
-// One failure mode of the sonar -- if, for example, it is not getting enough power
-// is to return the minimum distance the sonar can detect; 500mm for 10m sonars
-// or 300mm for 5m.
-// This is also what happens if something blocks the unit.
-boolean sonarValidReading(int16_t reading)
-{
-    return (reading > SONAR_MIN && reading < SONAR_MAX);
-}
-
-
 // Read Maxbotix MB7363 samples in free-run/filtered mode.
 // Don't call this more than 6Hz due to min. 160ms sonar cycle time
 // We reject up to SONAR_RETRIES invalid readings.
@@ -94,14 +80,6 @@ void sonarSamples(int16_t *sample)
       // on the serial pin, which takes ~10ms, we skip this.
       wait (15);
 
-      if (!sonarValidReading(reading) && retries)
-      {
-        Serial.println (F(" discard"));
-        retries--;
-        wait (200);
-        continue;
-      }
-
       Serial.println (F(" accept"));
       sample[sampleCount] = reading;
       sampleCount++;
@@ -118,38 +96,20 @@ int16_t sonarRead (void)
 {
     int16_t sample[SONAR_SAMPLES];
     int16_t distance;
+    
+    // read from sensor into sample array
+    sonarSamples (sample);
 
-    // Try 3 times to get a valid reading
-    uint8_t tries = 3; do
-    {
-      // read from sensor into sample array
-      sonarSamples (sample);
+    // TODO: Leo says this doesnt work
+    // sort the samples
+    sort (sample, SONAR_SAMPLES);
 
-      // sort the samples
-      sort (sample, SONAR_SAMPLES);
+    // take the mode, or median
+    distance = mode (sample, SONAR_SAMPLES);
 
-      // take the mode, or median
-      distance = mode (sample, SONAR_SAMPLES);
-
-      Serial.print (F("Surface distance from sensor is "));
-      Serial.print (distance);
-      Serial.println (F("mm."));
-
-    } while (!sonarValidReading(distance) && --tries);
+    Serial.print (F("Surface distance from sensor is "));
+    Serial.print (distance);
+    Serial.println (F("mm."));
 
     return distance;
-}
-
-
-// Convert sonar distance (mm) into height of water in the stream (cm)
-int16_t sonarStreamHeight(int16_t distance)
-{
-    // convert to cm and offset by hardcoded stream-bed height
-    int16_t streamHeight = (SENSOR_HEIGHT - (distance / 10));
-
-    Serial.print (F("Stream height: "));
-    Serial.print (streamHeight);
-    Serial.println (F("cm."));
-
-    return streamHeight;
 }

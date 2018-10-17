@@ -11,18 +11,11 @@
 // tepmachcha
 void setup(void);
 void loop(void);
-void upload(int16_t, boolean);
-boolean dmisPost(int, boolean,  uint16_t);
-boolean ews1294Post (int, boolean, uint16_t);
-boolean dweetPostStatus (int, uint16_t, uint16_t);
-boolean dweetPostFota (boolean);
-boolean dweetPost (PROGMEM char*, char *);
+void upload();
+boolean ews1294Post (int, boolean, uint16_t, uint16_t);
 
 // sonar
-extern int16_t sonarLastGoodReading;
 int16_t sonarRead(void);
-int16_t sonarStreamHeight(int16_t);
-boolean sonarValidReading(int16_t);
 
 // stalker
 uint16_t batteryRead(void);
@@ -48,16 +41,6 @@ void smsDeleteAll(void);
 void smsCheck(void);
 void checkSMS(void);
 boolean fonaSendCheckOK(const __FlashStringHelper*);
-
-// rtc
-void clockSet(void);
-void clockSet3(void);
-
-// XBee
-void XBeeOn();
-void XBeeOff(void);
-void XBeeOnMessage(char *);
-void XBee(void);
 
 // ota
 uint32_t crc_update(uint32_t, uint8_t);

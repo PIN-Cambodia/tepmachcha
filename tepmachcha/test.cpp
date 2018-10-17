@@ -9,10 +9,6 @@ extern Fat16 file;
 extern char file_name[13];              // 8.3
 extern uint16_t file_size;
 
-void testSMS() {
-  fona.sendSMS(TESTPHONE, "hello from tepmachcha");
-}
-
 void printMenu(void) {
   Serial.println(F("-------------------------------------"));
   Serial.println(F("[?] Print this menu"));
@@ -24,9 +20,7 @@ void printMenu(void) {
   Serial.println(F("[f] ftp firmware to fona"));
   Serial.println(F("[c] copy file from fona to SD"));
   Serial.println(F("[F] ftp firmware to SD"));
-  Serial.println(F("[T] Time - clockSet"));
   Serial.println(F("[N] Now = time from RTC"));
-  Serial.println(F("[d] dmis"));
   Serial.println(F("[X] set test file_name/size"));
   Serial.println(F("[v] SD file info"));
   Serial.println(F("[i] fona FS info"));
@@ -98,10 +92,6 @@ void test(void)
       Serial.println(firmwareGet());
       break;
     }
-    case 'T': {
-      clockSet();
-      break;
-    }
     case 'c': {
       if ( !(fileInit() && fileOpenWrite()) ) {
         Serial.print(F("open file failed\n"));
@@ -114,7 +104,7 @@ void test(void)
       break;
     }
     case 'd': {
-      ews1294Post(sonarRead(), solarCharging(solarVoltage()), fonaBattery());
+      ews1294Post(sonarRead(), solarCharging(solarVoltage()), solarVoltage(), fonaBattery());
       break;
     }
     case 'o': {
@@ -181,7 +171,7 @@ void test(void)
       break;
     }
     case 'N': {
-		  now = RTC.now();    //  Get the current time from the RTC
+		  DateTime now = RTC.now();    //  Get the current time from the RTC
       Serial.print(now.year());
       Serial.print(':');
       Serial.print(now.month());
@@ -300,7 +290,7 @@ void test(void)
       break;
     }
     case 'u': {
-      upload(555, true);
+      upload();
       break;
     }
   }

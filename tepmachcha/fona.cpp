@@ -248,16 +248,6 @@ void __attribute__ ((noinline)) smsParse(int8_t NumSMS)
     Serial.println (F(":"));
     Serial.println (smsBuffer);
 
-    // BEEPASSWORD
-    if (strcmp_P(smsBuffer, (prog_char*)F(BEEPASSWORD)) == 0)        //  XBee password...
-    {
-        XBeeOn();
-        XBeeOnMessage(smsBuffer);
-        fona.sendSMS(smsSender, smsBuffer);  //  Tell the sender what you've done
-        Serial.println (F("XBee turned on by SMS."));
-        return;
-    } else
-
     // FOTAPASSWD <filename> <filesize>
     if (strncmp_P(smsBuffer, (prog_char*)F(FOTAPASSWORD), sizeof(FOTAPASSWORD)-1) == 0) //  FOTA password...
     {
@@ -284,8 +274,6 @@ void __attribute__ ((noinline)) smsParse(int8_t NumSMS)
           fonaOff(); fonaOn(); status = firmwareGet(); // try again
         }
 
-        dweetPostFota(status);
-
         return;
         /*
         if (status)
@@ -308,20 +296,6 @@ void __attribute__ ((noinline)) smsParse(int8_t NumSMS)
 
         eepromWrite();
         reflash();
-    } else
-
-    // PINGPASSWORD
-    if (strcmp_P(smsBuffer, (prog_char*)F(PINGPASSWORD)) == 0)        //  PING password...
-    {
-        Serial.println(F("PING"));
-        dweetPostStatus(sonarRead(), solarVoltage(), batteryRead());
-
-        /*
-        sprintf_P(smsBuffer, (prog_char *)F(DEVICE " v:%d c:%d h:%d/" STR(SENSOR_HEIGHT)),
-          batteryRead(), solarVoltage(), sonarRead());
-        fona.sendSMS(smsSender, smsBuffer);
-        */
-        return;
     }
 }
 
