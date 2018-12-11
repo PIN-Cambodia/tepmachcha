@@ -17,14 +17,14 @@ void setup (void)
 
     // Set output pins (default is input)
 		pinMode (WATCHDOG, INPUT_PULLUP);
-		pinMode (RANGE, OUTPUT);
+		pinMode (SONAR_PWR, OUTPUT);
 		pinMode (FONA_KEY, OUTPUT);
 		pinMode (FONA_RX, OUTPUT);
-    pinMode (BUS_PWR, OUTPUT);
+    pinMode (VCC_PWR, OUTPUT);
 
-    digitalWrite (RANGE, LOW);           // sonar off
+    digitalWrite (SONAR_PWR, LOW);           // sonar off
 		digitalWrite (FONA_KEY, HIGH);       // Initial state for key pin
-    digitalWrite (BUS_PWR, HIGH);        // Needed to reduce noise in serial communication with the fona board. 
+    digitalWrite (VCC_PWR, HIGH);        // Needed to reduce noise in serial communication with the fona board. 
                                          // Note that D9 is a control pin on the Stalker 3.1 - It's not connected 
                                          // to anything as such in our project
 
@@ -53,7 +53,7 @@ void setup (void)
         fonaOff();
 				Serial.println (F("Low power sleep"));
 				Serial.flush();
-				digitalWrite (RANGE, LOW);        //  Make sure sonar is off
+				digitalWrite (SONAR_PWR, LOW);        //  Make sure sonar is off
 				RTC.enableInterrupts (EveryHour); //  We'll wake up once an hour
 				RTC.clearINTStatus();             //  Clear any outstanding interrupts
 				sleep.pwrDownMode();                    //  Set sleep mode to Power Down

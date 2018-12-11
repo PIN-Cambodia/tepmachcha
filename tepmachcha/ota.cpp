@@ -15,7 +15,6 @@ uint16_t file_size;
 
 boolean fileInit(void)
 {
-  digitalWrite (SD_POWER, LOW);        //  SD card on
   wait (1000);
 
   // init sd card
@@ -53,7 +52,7 @@ boolean fileOpenRead(void)  { return(fileOpen(O_READ)); }
 boolean fileClose(void)
 {
   file.close();
-  digitalWrite (SD_POWER, HIGH);        //  SD card off
+
 }
 
 

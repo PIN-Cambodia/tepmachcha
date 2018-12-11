@@ -56,19 +56,19 @@ void sonarSamples(int16_t *sample)
     uint8_t retries = SONAR_RETRIES;
     uint8_t sampleCount = 0;
 
-    digitalWrite (RANGE, HIGH);  // sonar on
+    digitalWrite (SONAR_PWR, HIGH);  // sonar on
     wait (1000);
 
     // wait for and discard first sample (160ms)
-    //pulseIn (PING, HIGH);
-    //wait (10);
+    pulseIn (SONAR, HIGH);
+    wait (10);
 
     // read subsequent (filtered) samples into array
     // discard up to SONAR_RETRIES invalid readings
     while (sampleCount < SONAR_SAMPLES)
     {
       // 1 µs pulse = 1mm distance
-      int16_t reading = pulseIn (PING, HIGH);
+      int16_t reading = pulseIn (SONAR, HIGH);
 
       // ~16 chars at 57600baud ~= 3ms delay
       Serial.print (F("Sample "));
@@ -85,7 +85,7 @@ void sonarSamples(int16_t *sample)
       sampleCount++;
     }
 
-    digitalWrite (RANGE, LOW);   // sonar off
+    digitalWrite (SONAR_PWR, LOW);   // sonar off
 }
 
 
