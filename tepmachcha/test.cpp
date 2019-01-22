@@ -1,4 +1,4 @@
-#include "tepmachcha.h"
+/*#include "tepmachcha.h"
 
 // call into bootloader jumptable at top of flash
 #define write_flash_page (*((void(*)(const uint32_t address))(0x7ffa/2)))
@@ -255,7 +255,7 @@ void test(void)
       buffer.x[0] = 0xde159efb; // nOFB IV??
       buffer.x[1] = 0xe9ffb3d;
       */
-      xtea(buffer.x);
+/*      xtea(buffer.x);
 
       //buffer.x[0] ^= 0xe48932fa; ?? output
       //buffer.x[1] ^= 0x5caaaba9;
@@ -295,4 +295,4 @@ void test(void)
     }
   }
   fonaFlush();
-}
+}*/

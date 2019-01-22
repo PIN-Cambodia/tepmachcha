@@ -18,9 +18,6 @@ boolean ews1294Post (int, boolean, uint16_t, uint16_t);
 int16_t sonarRead(void);
 
 // stalker
-uint16_t batteryRead(void);
-uint16_t solarVoltage(void);
-boolean solarCharging(uint16_t);
 void wait (uint32_t);
 int16_t internalTemp(void);
 uint16_t freeRam(void);
@@ -30,16 +27,12 @@ void debugFreeRam(void);
 void fonaFlush(void);
 char fonaRead(void);
 boolean fonaOn(void);
-boolean fonaPowerOn(void);
 boolean fonaSerialOn(void);
 boolean fonaGSMOn(void);
 boolean fonaGPRSOn(void);
 void fonaOff(void);
 void fonaGPRSOff(void);
-uint16_t fonaBattery(void);
 void smsDeleteAll(void);
-void smsCheck(void);
-void checkSMS(void);
 boolean fonaSendCheckOK(const __FlashStringHelper*);
 
 // ota
@@ -59,7 +52,3 @@ boolean firmwareGet();
 extern char file_name[];
 extern uint16_t file_size;
 extern uint8_t error;
-
-// test
-void test(void);
-void testSMS(void);

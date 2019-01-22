@@ -1,4 +1,5 @@
-#include "tepmachcha.h"
+
+/*#include "tepmachcha.h"
 
 // call into bootloader jumptable at top of flash
 #define write_flash_page (*((void(*)(const uint32_t address))(0x7ffa/2)))
@@ -83,82 +84,6 @@ void eepromWrite(void)
   }
   EEPROM.write(E2END, 0); // 0 triggers an attempt to flash from SD card on power-on or reset
 }
-
-// serial flow control on
-#define XON  17
-void xon(void)
-{
-  //digitalWrite(FONA_RTS, HIGH);
-}
-
-// serial flow control off
-#define XOFF 19
-void xoff(void)
-{
-  //digitalWrite(FONA_RTS, LOW);
-}
-
-
-//const static uint32_t key[4] = {
-const static PROGMEM uint32_t key[4] = {
-  KEY1, KEY2, KEY3, KEY4
-};
-
-// decrypt 8 bytes
-void xtea(uint32_t v[2])
-{
-    uint8_t i;
-    uint32_t v0=v[0], v1=v[1], delta=0x9E3779B9, sum=delta * 32;
-
-    for (i=0; i < 32; i++)
-    {
-        v1 -= (((v0 << 4) ^ (v0 >> 5)) + v0) ^ (sum + pgm_read_dword_near(&key[(sum>>11) & 3]));
-        sum -= delta;
-        v0 -= (((v1 << 4) ^ (v1 >> 5)) + v1) ^ (sum + pgm_read_dword_near(&key[sum & 3]));
-    }
-    v[0]=v0; v[1]=v1;
-}
-
-
-boolean fileDecrypt() {
-  byte c;
-  uint8_t i;
-  uint32_t crc;
-  union xtea_block_t
-  {
-    char chr[8];
-    uint32_t v[2];
-  };
-  xtea_block_t x;
-
-  crc = ~0L;
-
-      c = c ^ x.chr[i];
-      if (i++ == 8)
-      {
-        i = 0;
-        xtea(x.v);
-      }
-      crc = crc_update(crc, c);
-}
-
-
-const static PROGMEM uint32_t crc_table[16] = {
-    0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
-    0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
-    0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
-    0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
-};
-uint32_t crc_update(uint32_t crc, byte data)
-{
-    byte tbl_idx;
-    tbl_idx = crc ^ (data >> (0 * 4));
-    crc = pgm_read_dword_near(&crc_table[tbl_idx & 0x0f]) ^ (crc >> 4);
-    tbl_idx = crc ^ (data >> (1 * 4));
-    crc = pgm_read_dword_near(&crc_table[tbl_idx & 0x0f]) ^ (crc >> 4);
-    return crc;
-}
-
 
 // Read len bytes from fona serial and write to file buffer
 uint16_t fonaReadBlock(uint16_t len)
@@ -342,3 +267,4 @@ void reflash (void) {
     // Jump to bootloader
     flash_firmware(file_name);
 }
+*/

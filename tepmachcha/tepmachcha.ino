@@ -3,6 +3,7 @@
 const char DEVICE_STR[] PROGMEM = DEVICE;
 
 Sleep sleep;              // Create the sleep object
+Stalker stalker;
 
 static void rtcIRQ (void)
 {
@@ -16,28 +17,24 @@ void setup (void)
 		//interrupts();
 
     // Set output pins (default is input)
-		pinMode (WATCHDOG, INPUT_PULLUP);
-		pinMode (RANGE, OUTPUT);
-		pinMode (FONA_KEY, OUTPUT);
+		pinMode (SONAR_PWR, OUTPUT);
 		pinMode (FONA_RX, OUTPUT);
     pinMode (BUS_PWR, OUTPUT);
 
-    digitalWrite (RANGE, LOW);           // sonar off
-		digitalWrite (FONA_KEY, HIGH);       // Initial state for key pin
+    digitalWrite (SONAR_PWR, LOW);           // sonar off
     digitalWrite (BUS_PWR, HIGH);        // Needed to reduce noise in serial communication with the fona board. 
                                          // Note that D9 is a control pin on the Stalker 3.1 - It's not connected 
                                          // to anything as such in our project
 
-		Serial.begin (57600); // Begin debug serial
-    fonaSerial.begin (4800); //  Open a serial interface to FONA
-		Wire.begin();         // Begin I2C interface
-		RTC.begin();          // Begin RTC
+		Serial.begin (57600);     // Begin debug serial
+		Wire.begin();             // Begin I2C interface (TODO check if this is needed)
+		RTC.begin();              // Begin RTC
 
 		Serial.println ((__FlashStringHelper*)DEVICE_STR);
 
 		Serial.print (F("Battery: "));
-		Serial.print (batteryRead());
-		Serial.println (F("mV"));
+		Serial.print (stalker.readBattery());
+		Serial.println (F("V"));
     DEBUG_RAM
 
 		// If the voltage at startup is less than 3.5V, we assume the battery died in the field
@@ -48,19 +45,18 @@ void setup (void)
 		// hour to check the charge status.
 		//
     wait(1000);
-		while (batteryRead() < 3500)
+		while (stalker.readBattery() < 3.5)
 		{
         fonaOff();
 				Serial.println (F("Low power sleep"));
 				Serial.flush();
-				digitalWrite (RANGE, LOW);        //  Make sure sonar is off
+				digitalWrite (SONAR_PWR, LOW);        //  Make sure sonar is off
 				RTC.enableInterrupts (EveryHour); //  We'll wake up once an hour
 				RTC.clearINTStatus();             //  Clear any outstanding interrupts
 				sleep.pwrDownMode();                    //  Set sleep mode to Power Down
 				sleep.sleepInterrupt (RTCINTA, FALLING); //  Sleep; wake on falling voltage on RTC pin
 		}
 
-		// We will use the FONA to get the current time to set the Stalker's RTC
 		if (fonaOn())
     {
       // set ext. audio, to prevent crash on incoming calls
@@ -70,7 +66,7 @@ void setup (void)
       // Delete any accumulated SMS messages to avoid interference from old commands
       smsDeleteAll();
 
-      // TODO: Post HELO to server
+      // TODO: Post HELO to server - Send MSISDN, sim card number, RSSI, version, battery etc
     }
     fonaOff();
 
@@ -102,19 +98,13 @@ void loop (void)
 		sleep.sleepInterrupt (RTCINTA, FALLING); //  Sleep; wake on falling voltage on RTC pin
 }
 
-
 void upload()
 {
   int16_t distance = sonarRead();
   uint8_t status = 0;
-  uint16_t voltage;
+  uint16_t voltage = stalker.readBattery();
   uint16_t solarV;
-  boolean charging;
-  int16_t streamHeight;
-
-  voltage = batteryRead();
-  solarV = solarVoltage();
-  charging = solarCharging(solarV);
+  int charging = stalker.readChrgStatus();
 
   Serial.print (F("Uploading..."));
 
@@ -132,9 +122,6 @@ void upload()
     {
       fonaOff(); wait(2000); fonaOn();
     }
-
-    // process SMS messages
-    smsCheck();
   }
   fonaOff();
 }
@@ -148,12 +135,24 @@ boolean __attribute__ ((noinline)) ews1294Post (int16_t distance, boolean chargi
     uint16_t status_code = 0;
     uint16_t response_length = 0;
     char post_data[255];
+    String charge_status = "no_battery";
+
+    switch(charging)
+    {
+        case 1:
+            charge_status = "charging";
+            break;
+        case 2:
+            charge_status = "charged";
+            break;
+        default:;  
+    }
 
     DEBUG_RAM
 
     // Construct the body of the POST request:
     sprintf_P (post_data,
-      (prog_char *)F("{\"apiKey\": \"" EWSAPI_KEY "\", \"source\": \"" EWSDEVICE_ID "\", \"payload\":{\"distance\":%d,\"solarVoltage\":%d, \"charging\":%d,\"voltage\":%d, \"version\":\"" VERSION "\",\"internalTemp\":%d,\"freeRam\":%d}}\r\n"),
+      (prog_char *)F("{\"apiKey\": \"" EWSAPI_KEY "\", \"source\": \"" EWSDEVICE_ID "\", \"payload\":{\"distance\":%d, \"charging\":%d,\"voltage\":%d, \"version\":\"" VERSION "\",\"internalTemp\":%d,\"freeRam\":%d}}\r\n"),
         distance,
         solarV,
         charging,
@@ -164,10 +163,6 @@ boolean __attribute__ ((noinline)) ews1294Post (int16_t distance, boolean chargi
 
     Serial.println (post_data);
 
-    // ews1294.info does not currently support SSL; if it is added you will need to uncomment the following
-    //fona.sendCheckReply (F("AT+HTTPSSL=1"), F("OK"));   //  Turn on SSL
-    //fona.sendCheckReply (F("AT+HTTPPARA=\"REDIR\",\"1\""), F("OK"));  //  Turn on redirects (for SSL)
-
     // Send the POST request we have constructed
     if (fona.HTTP_POST_start (POST_ENDPOINT,
                               F("application/json"),
@@ -176,13 +171,11 @@ boolean __attribute__ ((noinline)) ews1294Post (int16_t distance, boolean chargi
                               &status_code,
                               &response_length)) {
 
-      
       // Read response
       if(status_code != 201) {
         fonaFlush();
         Serial.print (F("POST failed. Status-code: "));
-        Serial.println (status_code);
-        
+        Serial.println (status_code);        
         return false;
       } else {
         Serial.print(F("POST succeeded. Getting timestamp.. "));

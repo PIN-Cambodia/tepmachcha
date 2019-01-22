@@ -1,7 +1,7 @@
 #include "arduino-mk.h"
 
 //  Tepmachcha version number
-#define VERSION "2.2.1"
+#define VERSION "3.0.0"
 
 //  Customize this for each installation
 #include "config.h"           //  Site configuration
@@ -9,28 +9,24 @@
 #include <DS1337.h>           //  For the Stalker's real-time clock (RTC)
 #include <Sleep_n0m1.h>       //  Sleep library
 #include <SoftwareSerial.h>   //  For serial communication with FONA
+#include <SeeeduinoStalker.h> //  Seeduino Stalker v3.1 library, primarily useful for battery level and solar charging information
 #include <Wire.h>             //  I2C library for communication with RTC
 #include <Fat16.h>            //  FAT16 library for SD card
 #include <EEPROM.h>           //  EEPROM lib
-#include "Adafruit_FONA.h"
-#include <ArduinoJson.h>
+#include "Adafruit_FONA.h"    //  Fona library
+#include <ArduinoJson.h>      //  JSON library
 
 #define SERIAL_BUFFER_SIZE 32
 
-#define RTCINT1  2  //  Onboard Stalker RTC pin
-#define WATCHDOG 3  //  (RTCINT2) low to reset
-#define FONA_RST A1 //  FONA RST pin
-#define FONA_RX  6  //  UART pin into FONA
-#define PING     A0 //  Sonar ping pin
-#define FONA_TX  7  //  UART pin from FONA
-#define RANGE    8  //  Sonar range pin -- pull low to turn off sonar
-#define BUS_PWR  9  //  VCC power needed to communicate with the fona without too much noise
+#define FONA_RX  2    //  RX is into the module connected by default to Digital #2
+#define FONA_TX  3    //  TX is out of the module, connected to Digital #3
+#define FONA_RST 4    //  Hard reset pin. By default it has a high pull-up (module not in reset). If you absolutely got the module in a bad space, toggle this pin low for 100ms to perform a hard reset. We tie this to Digital #4, and the library does a hard-reset so you always have a fresh setup.
+#define FONA_RTS 5    //  (Ready To Send) - This is the module's flow control pin, you can use this to control how fast data is sent out from the module to the Arduino, good when you want to read only a few bytes at a time.
 
-#define FONA_RTS na //  FONA RTS pin - check
-#define FONA_KEY A2 //  FONA Key pin
-#define FONA_PS  A3 //  FONA power status pin
-#define SOLAR    A6 //  Solar charge state
-#define BATT     A7 //  Battery level
+#define SONAR_PWR 6   //  Connected to sonar pin 4, pull HIGH to turn on, LOW to turn off
+#define SONAR_PW  7   //  Connected to sonar pin 2, Pulse Width Output: This pin outputs a pulse width representation of the distance with a scale factor of 1uS per mm. The pulse width output is sent with a value within 0.5% of the serial output.
+#define BUS_PWR  9    //  Stalker 3.1 VCC power manager - needed to communicate with the fona without too much noise (TODO: To confirm)
+#define SD_POWER 4    //  Power manager to the SD card
 
 #define DEBUG_RAM     debugFreeRam();
 

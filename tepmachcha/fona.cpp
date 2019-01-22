@@ -5,90 +5,30 @@ const char OK_STRING[] PROGMEM = "OK";
 SoftwareSerial fonaSerial = SoftwareSerial (FONA_TX, FONA_RX);
 Adafruit_FONA fona = Adafruit_FONA (FONA_RST);
 
-
-void fonaToggle(boolean state)
-{
-  uint32_t timeout = millis() + 4500;
-
-  if (digitalRead (FONA_PS) != state) // If FONA not in desired state
-  {
-    digitalWrite(FONA_KEY, HIGH);     // KEY should be high to start
-
-    Serial.print (F("FONA -> "));
-    Serial.print (state);
-    while (digitalRead (FONA_PS) != state) 
-    {
-      if (millis() > timeout)
-      {
-        Serial.print(F(" timeout."));
-        break;
-      }
-      digitalWrite(FONA_KEY, LOW);    // pulse the Key pin low
-      wait (250);
-    }
-    digitalWrite (FONA_KEY, HIGH);    // then return it to high
-    Serial.println(F(" done."));
-  }
-}
-
-
-void fonaOff (void)
-{
-  //wait (5000);        // Shorter delays yield unpredictable results
-  wait (1000);
-  fonaGPRSOff();      // turn GPRS off first, for an orderly shutdown
-
-  wait (500);
-
-  if (digitalRead (FONA_PS) == HIGH)           //  If the FONA is on
-  {
-    fona.sendCheckReply (F("AT+CPOWD=1"), OK); //  send shutdown command
-    wait(500);
-    if (digitalRead (FONA_PS) == HIGH)         //  If the FONA is still on
-    {
-      fonaToggle(LOW);
-    }
-  }
-}
-
-
-boolean fonaPowerOn(void)
-{
-  if (digitalRead (FONA_PS) == LOW)  //  If the FONA is off
-  {
-    fonaToggle(HIGH);
-  }
-  return (digitalRead(FONA_PS) == HIGH);
-}
-
-
 boolean fonaSerialOn(void)
 {
-    Serial.println (F("FONA Serial"));
+    Serial.print (F("Turning on FONA Serial... "));
 
     fonaSerial.begin (4800);                      //  Open a serial interface to FONA
 
-    if (fona.begin (fonaSerial) == false)         //  Start the FONA on serial interface
-    {
-      Serial.println (F("FONA not found"));
+    if (fona.begin (fonaSerial) == false) {         //  Start the FONA on serial interface
+      Serial.println (F("not found"));
       return false;
     }
-  return true;
-}
 
+    Serial.println (F("Done"));
+    return true;
+}
 
 boolean fonaGSMOn(void) {
   uint32_t gsmTimeout = millis() + 30000;
 
-  Serial.print (F("Connecting GSM... "));
-  while (millis() < gsmTimeout)
-  {
+  Serial.print (F("Turning on FONA GSM... "));
+  while (millis() < gsmTimeout) {
     uint8_t status = fona.getNetworkStatus();
     wait (500);
-    //if (status == 1)  // replace with (status == 1 || status == 5) to allow roaming
-    if (status == 1 || status == 5)
-    {
-      Serial.println(F("done."));
+    if (status == 1) { // replace with (status == 1 || status == 5) to allow roaming
+      Serial.println(F("Done"));
       fona.sendCheckReply (F("AT+COPS?"), OK);  // Network operator
       fonaFlush();
       return true;
@@ -98,8 +38,8 @@ boolean fonaGSMOn(void) {
   return false;
 }
 
-
 boolean fonaGPRSOn(void) {
+  Serial.println (F("Turning on FONA GPRS..."));
   fona.setGPRSNetworkSettings (F(APN));  //  Set APN to local carrier
   wait (5000);    //  Give the network a moment
 
@@ -107,84 +47,67 @@ boolean fonaGPRSOn(void) {
   uint8_t rssi = fona.getRSSI();
   Serial.print (F("RSSI: ")); Serial.println (rssi);
 
-  if (rssi > 5)
-  {
-    for (uint8_t attempt = 1; attempt < 7; attempt++)
-    {
+  if (rssi > 5) {
+    for (uint8_t attempt = 1; attempt < 7; attempt++) {
       Serial.print (F("GPRS -> on, attempt ")); Serial.println(attempt);
       fona.enableGPRS (true);
 
-      if (fona.GPRSstate() == 1)
-      {
-        Serial.println (F("GPRS is on."));
+      if (fona.GPRSstate() == 1) {
+        Serial.println (F("GPRS is ON"));
         return true;
       }
-      Serial.println(F("Failed"));
+      Serial.println(F("GPRS failed"));
       wait (2500);
     }
   }
-  else
-  {
+  else {
     Serial.println (F("Inadequate signal strength"));
   }
   Serial.println(F("Giving up, GPRS Failed"));
   return false;
 }
 
-
 void fonaGPRSOff(void) {
   Serial.print (F("GPRS -> off: "));
-  if (digitalRead (FONA_PS) == HIGH) 
-  {
-    if (fona.GPRSstate() == 1)
-    {
-      if (!fona.enableGPRS(false))
-      {
+    if (fona.GPRSstate() == 1) {
+      if (!fona.enableGPRS(false)) {
         Serial.println (F("failed"));
         return;
       }
-    }
   }
   Serial.println (F("done"));
 }
 
-
-boolean fonaOn()
-{
-  if (fonaPowerOn())
-  {
-    if (fonaSerialOn())
-    {
-      Serial.print (F("FONA online. "));
-      if ( fonaGSMOn() )
-      {
+boolean fonaOn() {
+    if (fonaSerialOn()) {
+      if ( fonaGSMOn() ) {
         return fonaGPRSOn();
       }
-    }
   }
   return false;
 }
 
+void fonaOff() {
+    if (!fonaSerial.available()) {
+      return true;
+    }
+    return fonaGPRSOff();
+}
 
-void fonaFlush (void)
-{
+void fonaFlush (void) {
   // Read all available serial input from FONA to flush any pending data.
-  while(fona.available())
-  {
+  while(fona.available()) {
     char c = fona.read();
     loop_until_bit_is_set (UCSR0A, UDRE0); 
     UDR0 = c;
   }
 }
 
-
-char fonaRead(void)
-{
+char fonaRead(void) {
   // read a char from fona, waiting up to <timeout> ms for something at arrive
   uint32_t timeout = millis() + 1000;
 
-  while(!fona.available())
-  {
+  while(!fona.available()) {
     if (millis() > timeout)
       break;
     else
@@ -193,150 +116,7 @@ char fonaRead(void)
   return fona.read();
 }
 
-
-uint16_t fonaBattery(void) {
-    uint16_t voltage;
-    fona.getBattVoltage (&voltage);   //  Read the battery voltage from FONA's ADC
-    if (! (voltage < 6000 && voltage > 1000))
-      fona.getBattVoltage (&voltage); // try one more time
-
-    return voltage;
-}
-
-
-void smsDeleteAll(void)
-{
+void smsDeleteAll(void) {
   fona.sendCheckReply (F("AT+CMGF=1"), OK);            //  Enter text mode
-  fona.sendCheckReply (F("AT+CMGDA=\"DEL ALL\""), OK); //  Delete all SMS messages                }
-}
-
-
-char *parseFilename(char *b)
-{
-    uint8_t i;
-    DEBUG_RAM
-
-    while (*b == ' ') b++; // skip spaces
-
-    // copy into file_name
-    for ( i = 0; i < 12 && b[i] && b[i] != ' ' ; i++) {
-      file_name[i] = b[i];
-    }
-    file_name[i] = 0;      // terminate string
-    return b+i;            // return postition of char after file_name
-}
-
-
-#define SIZEOF_SMS 80
-#define SIZEOF_SMS_SENDER 18
-// don't inline, or else the buffers get put above the stack
-void __attribute__ ((noinline)) smsParse(int8_t NumSMS)
-{
-		char smsBuffer[SIZEOF_SMS];
-		char smsSender[SIZEOF_SMS_SENDER];
-		uint16_t smsLen;
-    DEBUG_RAM
-
-    fona.readSMS (NumSMS, smsBuffer, sizeof(smsBuffer)-1, &smsLen);  // retrieve the most recent one
-    wait (500);                                                      // required delay
-
-    fona.getSMSSender (NumSMS, smsSender, sizeof(smsSender)-1);      // get sender
-    wait (500);
-
-    Serial.print (F("Message from "));
-    Serial.print (smsSender);
-    Serial.println (F(":"));
-    Serial.println (smsBuffer);
-
-    // FOTAPASSWD <filename> <filesize>
-    if (strncmp_P(smsBuffer, (prog_char*)F(FOTAPASSWORD), sizeof(FOTAPASSWORD)-1) == 0) //  FOTA password...
-    {
-        // read filename, size
-        Serial.println(F("FOTA"));
-
-        char *b = parseFilename( smsBuffer + sizeof(FOTAPASSWORD) );
-
-        while (*b == ' ') b++;     // skip spaces
-
-        // read file size
-        file_size = 0;
-        while (*b >= '0' && *b <= '9') {
-          file_size = (file_size * 10) + (*b - '0');
-          b++;
-        }
-
-        Serial.print(F("filename:")); Serial.println(file_name);
-        Serial.print(F("size:")); Serial.println(file_size);
-
-        uint8_t status;
-        if (!(status = firmwareGet()))   // If at first we dont succeed
-        {
-          fonaOff(); fonaOn(); status = firmwareGet(); // try again
-        }
-
-        return;
-        /*
-        if (status)
-        {
-          sprintf_P(smsBuffer, (prog_char *)F("d/l success: %s (%d)"), \
-            file_name, file_size);
-        } else {
-          sprintf_P(smsBuffer, (prog_char *)F("d/l failed: %s (%d) error: %d"), \
-            file_name, file_size, error);
-        }
-        fona.sendSMS(smsSender, smsBuffer);  // return file stat, status
-        */
-    } else
-
-    // FLASHPASSWD <filename>
-    if (strncmp_P(smsBuffer, (prog_char*)F(FLASHPASSWORD), sizeof(FLASHPASSWORD)-1) == 0) //  FOTA password...
-    {
-        Serial.println(F("FLASH"));
-        parseFilename( smsBuffer + sizeof(FLASHPASSWORD) );
-
-        eepromWrite();
-        reflash();
-    }
-}
-
-
-//  Check SMS messages received for any valid commands
-void smsCheck (void)
-{
-		uint32_t timeout;
-		int8_t NumSMS;
-    DEBUG_RAM
-
-		fonaFlush();    //  Flush out any unresolved data
-		Serial.println (F("Checking for SMS messages..."));
-
-		timeout = millis() + 60000;       // it can take a while for fona to receive queued SMS
-    do {
-        NumSMS = fona.getNumSMS();    // -1 for error
-        wait (5000);
-    } while (NumSMS <= 0 && millis() <= timeout);
-
-		Serial.print (NumSMS);
-		Serial.println (F(" message(s) waiting."));
-
-    // For each SMS message
-		while (NumSMS > 0)
-		{
-      smsParse(NumSMS);
-
-      wait (1000);
-      fona.deleteSMS (NumSMS);
-      wait (1500);
-
-      NumSMS = fona.getNumSMS();
-      Serial.print(F("# SMS: ")); Serial.println(NumSMS);
-
-      // Occasionally messages won't delete and this loops forever. If
-      // the process takes too long we'll just nuke everything.
-      if (millis() >= timeout)
-      {
-        smsDeleteAll();
-        return;
-      }
-		}
+  fona.sendCheckReply (F("AT+CMGDA=\"DEL ALL\""), OK); //  Delete all SMS messages
 }
