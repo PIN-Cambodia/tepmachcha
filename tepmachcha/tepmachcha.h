@@ -24,8 +24,8 @@
 #define FONA_RX  6  //  UART pin into FONA
 #define PING     A0 //  Sonar ping pin
 #define FONA_TX  7  //  UART pin from FONA
-#define RANGE    8  //  Sonar range pin -- pull low to turn off sonar
-#define BUS_PWR  9  //  VCC power needed to communicate with the fona without too much noise
+#define SONAR_PWR 8  //  Sonar range pin -- pull low to turn off sonar
+#define VCC_PWR  9  //  VCC power needed to communicate with the fona without too much noise
 
 #define FONA_RTS na //  FONA RTS pin - check
 #define FONA_KEY A2 //  FONA Key pin

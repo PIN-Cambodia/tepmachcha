@@ -65,7 +65,7 @@ void sonarSamples(int16_t *sample)
 {
     uint8_t sampleCount = 0;
 
-    digitalWrite (RANGE, HIGH);  // sonar on
+    digitalWrite (SONAR_PWR, HIGH);  // sonar on
     wait (200);
 
     // read subsequent (filtered) samples into array
@@ -88,7 +88,7 @@ void sonarSamples(int16_t *sample)
       sampleCount++;
     }
 
-    digitalWrite (RANGE, LOW);   // sonar off
+    digitalWrite (SONAR_PWR, LOW);   // sonar off
 }
 
 
