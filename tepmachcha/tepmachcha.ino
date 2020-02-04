@@ -1,222 +1,223 @@
 #include "tepmachcha.h"
+#include "fona.h"
+#include "sonar.h"
 
-const char DEVICE_STR[] PROGMEM = DEVICE;
+// RTC requirements
+#include <avr/sleep.h>
+#include <avr/power.h>
+#include <Wire.h>
+#include "DS1337.h"
+DS1337 RTC;
+static DateTime interruptTime;
+static uint16_t interruptInterval = 900; //Seconds. Change this to suitable value.
 
-Sleep sleep;              // Create the sleep object
-Stalker stalker;
+void setup() {
+  // Setup the pins
 
-static void rtcIRQ (void)
-{
-		RTC.clearINTStatus(); //  Wake from sleep and clear the RTC interrupt
-}
+  /**
+   * We use the LED to communicate without Serial.
+   */
+  pinMode(LED_PIN, OUTPUT);
 
-void setup (void)
-{
-    // set RTC interrupt handler
-		attachInterrupt (RTCINTA, rtcIRQ, FALLING);
-		//interrupts();
+  /**
+   * Setup the SONAR
+   */
 
-    // Set output pins (default is input)
-		pinMode (SONAR_PWR, OUTPUT);
-		pinMode (FONA_RX, OUTPUT);
-    pinMode (BUS_PWR, OUTPUT);
+  pinMode(SONAR_POWER, OUTPUT);
+  digitalWrite(SONAR_POWER, LOW);
+  pinMode(SONAR_READ, INPUT);
 
-    digitalWrite (SONAR_PWR, LOW);           // sonar off
-    digitalWrite (BUS_PWR, HIGH);        // Needed to reduce noise in serial communication with the fona board. 
-                                         // Note that D9 is a control pin on the Stalker 3.1 - It's not connected 
-                                         // to anything as such in our project
+  /**
+   * Setup standard serial for debugging
+   */
+  Serial.begin(115200);
+  Serial.println(F("Initializing...."));
 
-		Serial.begin (57600);     // Begin debug serial
-		Wire.begin();             // Begin I2C interface (TODO check if this is needed)
-		RTC.begin();              // Begin RTC
+  /**
+   * Initialize INT0 for accepting interrupts, as well as Wire and RTC needed for low power sleep
+   */
+  PORTD |= 0x04; 
+  DDRD &=~ 0x04;
+  Wire.begin();
+  RTC.begin();
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
 
-		Serial.println ((__FlashStringHelper*)DEVICE_STR);
-
-		Serial.print (F("Battery: "));
-		Serial.print (stalker.readBattery());
-		Serial.println (F("V"));
-    DEBUG_RAM
-
-		// If the voltage at startup is less than 3.5V, we assume the battery died in the field
-		// and the unit is attempting to restart after the panel charged the battery enough to
-		// do so. However, running the unit with a low charge is likely to just discharge the
-		// battery again, and we will never get enough charge to resume operation. So while the
-		// measured voltage is less than 3.5V, we will put the unit to sleep and wake once per 
-		// hour to check the charge status.
-		//
-    wait(1000);
-		while (stalker.readBattery() < 3.5)
-		{
-        fonaOff();
-				Serial.println (F("Low power sleep"));
-				Serial.flush();
-				digitalWrite (SONAR_PWR, LOW);        //  Make sure sonar is off
-				RTC.enableInterrupts (EveryHour); //  We'll wake up once an hour
-				RTC.clearINTStatus();             //  Clear any outstanding interrupts
-				sleep.pwrDownMode();                    //  Set sleep mode to Power Down
-				sleep.sleepInterrupt (RTCINTA, FALLING); //  Sleep; wake on falling voltage on RTC pin
-		}
-
-		if (fonaOn())
-    {
-      // set ext. audio, to prevent crash on incoming calls
-      // https://learn.adafruit.com/adafruit-feather-32u4-fona?view=all#faq-1
-      fona.sendCheckReply(F("AT+CHFA=1"), OK);
-
-      // Delete any accumulated SMS messages to avoid interference from old commands
-      smsDeleteAll();
-
-      // TODO: Post HELO to server - Send MSISDN, sim card number, RSSI, version, battery etc
-    }
-    fonaOff();
-
-		RTC.enableInterrupts (EveryMinute);  //  RTC will interrupt every minute
-		RTC.clearINTStatus();                //  Clear any outstanding interrupts
-		sleep.sleepInterrupt (RTCINTA, FALLING); //  Sleep; wake on falling voltage on RTC pin
-}
-
-
-// This runs every minute, triggered by RTC interrupt
-void loop (void)
-{
-		DateTime now = RTC.now();      //  Get the current time from the RTC
-
-		Serial.print (now.hour());
-		Serial.print (F(":"));
-		Serial.println (now.minute());
-
-    // Check if it is time to send a scheduled reading
-		if (now.minute() % INTERVAL == 0) {
-      upload ();
-    }
-
-		Serial.println(F("sleeping"));
-		Serial.flush();                         //  Flush any output before sleep
-
-		sleep.pwrDownMode();                    //  Set sleep mode to "Power Down"
-		RTC.clearINTStatus();                   //  Clear any outstanding RTC interrupts
-		sleep.sleepInterrupt (RTCINTA, FALLING); //  Sleep; wake on falling voltage on RTC pin
-}
-
-void upload()
-{
-  int16_t distance = sonarRead();
-  uint8_t status = 0;
-  uint16_t voltage = stalker.readBattery();
-  uint16_t solarV;
-  int charging = stalker.readChrgStatus();
-
-  Serial.print (F("Uploading..."));
-
-  if (fonaOn() || (fonaOff(), delay(5000), fonaOn())) // try twice
-  {
-
-    uint8_t attempts = 2; do
-    {
-      status = ews1294Post(distance, charging, solarV, voltage);
-    } while (!status && --attempts);
-
-    // if the upload failed the fona can be left in an undefined state,
-    // so we reboot it here to ensure SMS works
-    if (!status)
-    {
-      fonaOff(); wait(2000); fonaOn();
-    }
+  /**
+   * Turn on fona and print the IMEI and Sim Card Number. 
+   */
+  if(!fonaOn()) {
+      Serial.print(F("CRITICAL: Could not turn FONA on, rebooting..."));
+      // Before we reboot, flash the LED 20 times to indicate we're not happy
+      reboot();
   }
+
+  // Let's sync the time, just to make sure that everything is working as expected
+  fonaEnableNTPTimeSync();
+  // TODO: Sync shield and RTC time
+
+  /**
+    * Customised behaviour below, only runs on boot
+    */
+
+  // Build the variables that we're submitting
+  char imei[20] = {0};
+  fonaGetIMEI(imei);
+  char iccid[25] = {0};
+  fonaGetICCID(iccid);
+
+  char post_data[200];
+
+  sprintf_P (post_data,
+    (prog_char *)F("{\"source\": \"" DEVICE_ID "\", \"apiKey\": \"" API_KEY "\", \"payload\":{\"rssi\":%d,\"imei\":%s, \"iccid\":\"%s\",\"bat\":%d, \"firmware_version\":\"" FIRMWARE_VERSION "\"}}"),
+    fonaGetRSSI(),
+    imei,
+    iccid,
+    (int)(stalker.readBattery()*1000)
+  );
+  
+  // Try posting 3 times before giving up
+  fonaPOSTWithRetry(SETUP_ENDPOINT, post_data, 3);
   fonaOff();
+
+  /**
+   * Set the first interrupt to be in X seconds. Note that since we dont 
+   * actually sleep after this, the loop will run once before we go into 
+   * the interrupt sequence, which means we get a measurement straight 
+   * after boot (which we want).
+   */
+  DateTime start = RTC.now();
+  interruptTime = DateTime(start.get() + interruptInterval);
 }
 
+void loop() {
+  DateTime now = RTC.now(); //get the current date-time    
+  
+  Serial.println(F("Turning on sonar"));
+  digitalWrite(SONAR_POWER, HIGH);
 
-// Don't allow ewsPost() to be inlined, as the compiler will also attempt to optimize stack
-// allocation, and ends up preallocating at the top of the stack. ie it moves the beginning
-// of the stack (as seen in setup()) down ~200 bytes, leaving the rest of the app short of ram
-boolean __attribute__ ((noinline)) ews1294Post (int16_t distance, boolean charging, uint16_t solarV, uint16_t voltage)
-{
-    uint16_t status_code = 0;
-    uint16_t response_length = 0;
-    char post_data[255];
-    String charge_status = "no_battery";
+  Serial.println(F("Reading..."));
+  int distance = sonarRead();
+  int spread = sonarSpread();
 
-    switch(charging)
-    {
-        case 1:
-            charge_status = "charging";
-            break;
-        case 2:
-            charge_status = "charged";
-            break;
-        default:;  
-    }
+  Serial.print(F("Distance to closest surface is "));
+  Serial.print(distance);
+  Serial.println(F("mm"));
+  Serial.print(F("Recorded distances vary by "));
+  Serial.print(spread);
+  Serial.println(F("mm"));
 
-    DEBUG_RAM
+  Serial.println(F("Turning off sonar"));
+  digitalWrite(SONAR_POWER, LOW);
 
-    // Construct the body of the POST request:
+  if(fonaOn()) {
+
+    // Build the variables that we're submitting
+    char imei[20] = {0};
+    fonaGetIMEI(imei);
+    char iccid[25] = {0};
+    fonaGetICCID(iccid);
+  
+    char post_data[200];
+  
     sprintf_P (post_data,
-      (prog_char *)F("{\"apiKey\": \"" EWSAPI_KEY "\", \"source\": \"" EWSDEVICE_ID "\", \"payload\":{\"distance\":%d, \"charging\":%d,\"voltage\":%d, \"version\":\"" VERSION "\",\"internalTemp\":%d,\"freeRam\":%d}}\r\n"),
-        distance,
-        solarV,
-        charging,
-        voltage,
-        internalTemp(),
-        freeRam()
+      (prog_char *)F("{\"source\": \"" DEVICE_ID "\", \"apiKey\": \"" API_KEY "\", \"payload\":{\"rssi\":%d,\"distance\":%d,\"spread\":%d,\"bat\":%d,\"charging\":%d}}"),
+      fonaGetRSSI(),
+      distance,
+      spread,
+      (int)(stalker.readBattery()*1000),
+      stalker.readChrgStatus()
     );
+    
+    // Try posting 3 times before giving up
+    fonaPOSTWithRetry(DATAPOINT_ENDPOINT, post_data, 3);
 
-    Serial.println (post_data);
+    Serial.println(F("Turning off FONA"));
+    fonaOff(); 
+  } else {
+    Serial.print(F("CRITICAL: Could not turn FONA on, will not be able to submit reading"));
+  }
+  Serial.println();/*
 
-    // Send the POST request we have constructed
-    if (fona.HTTP_POST_start (POST_ENDPOINT,
-                              F("application/json"),
-                              (uint8_t *)post_data,
-                              strlen(post_data),
-                              &status_code,
-                              &response_length)) {
+  /**
+   * Go into low power sleep until next time
+   */
+  RTC.clearINTStatus(); //This function call is a must to bring /INT pin HIGH after an interrupt.
+  RTC.enableInterrupts(interruptTime.hour(), interruptTime.minute(), interruptTime.second());    // set the interrupt at (h,m,s)
+  attachInterrupt(0, INT0_ISR, LOW);  //Enable INT0 interrupt (as ISR disables interrupt). This strategy is required to handle LEVEL triggered interrupt
 
-      // Read response
-      if(status_code != 201) {
-        fonaFlush();
-        Serial.print (F("POST failed. Status-code: "));
-        Serial.println (status_code);        
-        return false;
-      } else {
-        Serial.print(F("POST succeeded. Getting timestamp.. "));
-        int colons = 0;
-        long timestamp = 0;
-        long e = 1000000000;            // We use this to build the timestamp
+  //Power Down routines
+  cli();
+  sleep_enable();      // Set sleep enable bit
+  sleep_bod_disable(); // Disable brown out detection during sleep. Saves more power
+  sei();
+  Serial.println(F("Sleeping..."));
+  delay(10); //This delay is required to allow print to complete
+  //Shut down all peripherals like ADC before sleep. Refer Atmega328 manual
+  power_all_disable(); //This shuts down ADC, TWI, SPI, Timers and USART
+  sleep_cpu();         // Sleep the CPU as per the mode set earlier(power down)
+  sleep_disable();     // Wakes up sleep and clears enable bit. Before this ISR would have executed
+  power_all_enable();  //This shuts enables ADC, TWI, SPI, Timers and USART
+  delay(10); //This delay is required to allow CPU to stabilize
+  Serial.println("Awake from sleep");
+}
 
-        while (response_length > 0) {
-          while (fona.available()) {
-            char c = fona.read();
-            if(c == ':')
-              colons++;
-            if(colons == 2 && c >= '0' && c <= '9' && e > 0) {
-              // Note -48: Since the ASCII char codes for 0-9 start at 48, we can get the int value of the
-              // char by simply subtracting 48 from the ASCII char reference
-              timestamp = timestamp + (c-48)*e;
-              e = e/10;
-            }
-            //Serial.print(c);
-            response_length--;
-            // Break out of fona.available()
-            if (! response_length) break;
-          }
-        }
+//Interrupt service routine for external interrupt on INT0 pin conntected to /INT
+void INT0_ISR()
+{
+  // Keep this as short as possible. Possibly avoid using function calls  
+  Serial.println(" External Interrupt detected ");
+  detachInterrupt(0);
+  interruptTime = DateTime(interruptTime.get() + interruptInterval);
+}
 
-        // Here's a quirk; RTC starts at year 2000, so we need to subtract 30 years (Unix Epoch 1970) from the timestamp, including the 7 leap year extra days there were between 1970 and 2000
-        timestamp = timestamp - (30L*365+7)*24*60*60;
+void(* resetFunc) (void) = 0;
+void reboot() {
+  int i = 0; 
+  while(i < 20) {
+    digitalWrite(LED_PIN, HIGH);
+    delay(100);
+    digitalWrite(LED_PIN, LOW);
+    delay(50);
+    i++;
+  }
+  resetFunc();
+}
 
-        Serial.print(timestamp);
-        Serial.print(F(". Adjusting RTC... "));
-        DateTime dt(timestamp);
-        Serial.print(F(" ("));
-        Serial.print(dt.iso8601());
-        Serial.print(F(")..."));
-        RTC.adjust(dt);
-        Serial.println(F(" Done"));
-        
-        return true;
-      }
-    } else {
-      Serial.println(F("POST failed"));
-      return false;
-    }
+extern int __heap_start;
+extern void *__brkval;
+uint16_t freeRam (void) {
+  int v; 
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+}
+
+// read temperature of the atmega328 itself
+int16_t internalTemp(void)
+{
+  uint16_t wADC = 0;
+  int16_t t;
+
+  // The internal temperature has to be used
+  // with the internal reference of 1.1V.
+  // Channel 8 can not be selected with
+  // analogRead() yet.
+
+  // Set the internal reference and mux.
+  ADMUX = (_BV(REFS1) | _BV(REFS0) | _BV(MUX3));
+  ADCSRA |= _BV(ADEN);  // enable the ADC
+
+  delay(20);            // wait for voltages to become stable.
+
+  for (uint8_t i = 0 ; i < 64 ; i++)
+  {
+    ADCSRA |= _BV(ADSC);  // Start the ADC
+
+    // wait for conversion to complete
+    while (bit_is_set(ADCSRA,ADSC));
+
+    // Reading register "ADCW" takes care of how to read ADCL and ADCH.
+    wADC += ADCW;
+  }
+
+  // offset ~324.31, scale by 1/1.22 to give C
+  return (wADC - (uint16_t)(324.31*64) ) / 78;    // 64/78 ~= 1/1.22
 }
